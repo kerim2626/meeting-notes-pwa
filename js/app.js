@@ -7,6 +7,7 @@ const $view = document.getElementById("view");
 const $title = document.getElementById("title");
 const $badge = document.getElementById("storage-badge");
 let store = null;
+let lastDeleted = null;
 
 // ---------- утилиты DOM (текст пользователя только через textContent) ----------
 function h(tag, attrs = {}, ...kids) {
@@ -42,6 +43,8 @@ function setHeader(title, back) {
   $badge.textContent = store ? (store.name === "sqlite" ? "SQLite" : "Файлы") : "";
   document.querySelectorAll(".tabbar a").forEach((a) => a.classList.toggle("on", location.hash.startsWith(a.dataset.match)));
 }
+
+const draftKey = (id) => `notes.draft.${id || "new"}`;
 
 // ---------- экраны ----------
 function noteCard(n) {
@@ -101,8 +104,9 @@ async function share(n) {
 async function removeNote(n) {
   if (!confirm(`Удалить заметку «${n.title}»?`)) return;
   await store.remove(n.id);
+  lastDeleted = n;
   location.hash = "#/";
-  toast("Заметка удалена");
+  toast("Заметка удалена", { label: "Отменить", fn: async () => { await store.save(lastDeleted); lastDeleted = null; route(); } });
 }
 
 function field(label, input, error) {
@@ -113,8 +117,12 @@ async function editView(id) {
   const existing = id ? await store.get(id) : null;
   if (id && !existing) { location.hash = "#/"; return; }
   setHeader(existing ? "Изменение" : "Новая заметка", existing ? `#/note/${encodeURIComponent(id)}` : "#/");
-  const v = existing || { title: "", date: todayISO(), time: nowHM(), kind: "meeting", place: "", participants: "", content: "" };
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(draftKey(id)) || "null"); } catch { /* нет черновика */ }
+  const v = draft || existing || { title: "", date: todayISO(), time: nowHM(), kind: "meeting", place: "", participants: "", content: "" };
   const form = h("form", { class: "card form", novalidate: true },
+    draft && h("p", { class: "notice" }, "Восстановлен несохраненный черновик. ",
+      h("button", { type: "button", class: "link", onclick: () => { localStorage.removeItem(draftKey(id)); editView(id); } }, "Отбросить")),
     field("Заголовок", h("input", { name: "title", value: v.title, maxlength: 120, placeholder: "Например: Планерка департамента", autocomplete: "off" })),
     h("div", { class: "row" },
       field("Дата", h("input", { type: "date", name: "date", value: v.date })),
@@ -125,18 +133,25 @@ async function editView(id) {
     field("Содержание", h("textarea", { name: "content", rows: 9, placeholder: "Повестка, решения, ответственные и сроки" }, v.content)),
     h("div", { class: "actions sticky" },
       h("button", { class: "btn btn--wide" }, "Сохранить"),
-      h("a", { class: "btn btn--ghost", href: existing ? `#/note/${encodeURIComponent(id)}` : "#/" }, "Отмена")));
+      h("a", { class: "btn btn--ghost", href: existing ? `#/note/${encodeURIComponent(id)}` : "#/",
+        onclick: () => localStorage.removeItem(draftKey(id)) }, "Отмена")));
+  form.addEventListener("input", (e) => {
+    const err = form.querySelector(`.err[data-for="${e.target.name}"]`);
+    if (err) err.textContent = "";                       // подсказка об ошибке исчезает при исправлении поля
+    try { localStorage.setItem(draftKey(id), JSON.stringify(Object.fromEntries(new FormData(form)))); } catch { /* нет места */ }
+  });
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const { note, errors, ok } = validate(Object.fromEntries(new FormData(form)), existing);
     form.querySelectorAll(".err").forEach((s) => (s.textContent = errors[s.dataset.for] || ""));
     if (!ok) { form.querySelector(`[name=${Object.keys(errors)[0]}]`).focus(); return; }
     await store.save(note);
+    localStorage.removeItem(draftKey(id));
     toast(existing ? "Изменения сохранены" : "Заметка сохранена");
     location.hash = `#/note/${encodeURIComponent(note.id)}`;
   });
   $view.replaceChildren(form);
-  if (!existing) form.querySelector("[name=title]").focus();
+  if (!existing && !draft) form.querySelector("[name=title]").focus();
 }
 
 const searchState = { words: "", dateFrom: "", dateTo: "", timeFrom: "", timeTo: "", kind: "" };
@@ -146,7 +161,7 @@ async function searchView() {
   const results = h("div", { class: "list" });
   const counter = h("p", { class: "muted small" });
   const form = h("form", { class: "card form search" },
-    h("input", { type: "search", name: "words", value: searchState.words, placeholder: "Ключевые слова", "aria-label": "Ключевые слова" }),
+    h("input", { type: "search", name: "words", value: searchState.words, placeholder: "Слова из заголовка, текста или участников", "aria-label": "Ключевые слова" }),
     h("div", { class: "row" },
       field("Дата с", h("input", { type: "date", name: "dateFrom", value: searchState.dateFrom })),
       field("по", h("input", { type: "date", name: "dateTo", value: searchState.dateTo }))),
@@ -155,11 +170,12 @@ async function searchView() {
       field("до", h("input", { type: "time", name: "timeTo", value: searchState.timeTo }))),
     field("Тип", h("select", { name: "kind" }, h("option", { value: "" }, "Любой"),
       Object.entries(KINDS).map(([k, t]) => h("option", { value: k, selected: k === searchState.kind }, t)))),
-  );
+    h("button", { type: "button", class: "link", onclick: () => { Object.keys(searchState).forEach((k) => (searchState[k] = "")); searchView(); } }, "Сбросить фильтры"));
   const run = async () => {
     Object.assign(searchState, Object.fromEntries(new FormData(form)));
     const found = await store.search(searchState);
-    counter.textContent = `Найдено: ${found.length}`;
+    const active = Object.values(searchState).some(Boolean);
+    counter.textContent = active ? `Найдено: ${found.length}` : `Все заметки: ${found.length}`;
     results.replaceChildren(...(found.length ? grouped(found) : [h("p", { class: "empty" }, "Ничего не найдено. Измените условия поиска.")]));
   };
   form.addEventListener("input", () => { clearTimeout(run.t); run.t = setTimeout(run, 200); });
@@ -218,7 +234,7 @@ async function settingsView() {
       h("div", { class: "actions" },
         h("button", { class: "btn btn--ghost", onclick: async () => { for (const n of DEMO_NOTES()) await store.save(n); toast("Примеры добавлены"); location.hash = "#/"; } }, "Добавить примеры"),
         h("button", { class: "btn btn--danger", onclick: async () => { if (confirm("Удалить все заметки в текущем хранилище?")) { await store.clear(); toast("Хранилище очищено"); settingsView(); } } }, "Удалить все"))),
-    h("p", { class: "muted small center" }, "Блокнот встреч 1.0 · работает офлайн после первого запуска"));
+    h("p", { class: "muted small center" }, "Блокнот встреч 1.1 · работает офлайн после первого запуска"));
 }
 
 // ---------- маршрутизация ----------
