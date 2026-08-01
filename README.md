@@ -110,8 +110,8 @@ python3 -m http.server 8000      # из корня репозитория
 # http://localhost:8000 — localhost считается безопасным контекстом, Service Worker и OPFS работают
 ```
 
-Зависимостей и сборки нет. Библиотека sql.js 1.10.3 загружается с jsDelivr при первом запуске
-и кэшируется Service Worker для работы без сети.
+Зависимостей и сборки нет. Библиотека sql.js 1.10.3 (лицензия MIT) лежит в каталоге `vendor/sql.js`,
+поэтому приложение не зависит от доступности CDN; Service Worker кэширует ее для работы без сети.
 
 ## Структура
 
@@ -123,6 +123,7 @@ js/model.js                               модель заметки, пров�
 js/stores/sqlite-store.js, idb.js         хранилище SQLite
 js/stores/file-store.js, opfs-worker.js   файловое хранилище
 js/demo.js                                примеры заметок
+vendor/sql.js/                            SQLite, скомпилированный в WebAssembly (sql.js 1.10.3, MIT)
 tests/                                    браузерные тесты
 docs/guide/, docs/usability/              руководство и материалы юзабилити-тестирования
 ```

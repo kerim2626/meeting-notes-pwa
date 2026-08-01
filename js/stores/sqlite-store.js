@@ -2,7 +2,8 @@
 import { matches, searchText, sortNotes } from "../model.js";
 import { idbGet, idbSet } from "./idb.js";
 
-const SQLJS = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/";
+// sql.js 1.10.3 (MIT) хранится в репозитории: приложение не зависит от доступности CDN
+const SQLJS = new URL("../../vendor/sql.js/", import.meta.url).href;
 const DB_KEY = "notes.sqlite";
 
 const SCHEMA = `
@@ -29,7 +30,7 @@ async function loadSqlJs() {
       const s = document.createElement("script");
       s.src = SQLJS + "sql-wasm.js";
       s.onload = resolve;
-      s.onerror = () => reject(new Error("Не удалось загрузить модуль SQLite. Проверьте интернет при первом запуске."));
+      s.onerror = () => reject(new Error("Не удалось загрузить модуль SQLite."));
       document.head.append(s);
     });
   }
