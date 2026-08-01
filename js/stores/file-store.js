@@ -4,7 +4,8 @@
 import { matches, sortNotes } from "../model.js";
 
 export class FileStore {
-  constructor() { this.name = "files"; this.title = "Файлы на устройстве"; }
+  /** dir — каталог в OPFS: у приложения «notes», у браузерных тестов отдельный. */
+  constructor(dir = "notes") { this.name = "files"; this.title = "Файлы на устройстве"; this.dirName = dir; }
 
   static supported() {
     return !!(navigator.storage && navigator.storage.getDirectory);
@@ -13,7 +14,7 @@ export class FileStore {
   async init() {
     if (!FileStore.supported()) throw new Error("Браузер не поддерживает файловое хранилище (OPFS)");
     const root = await navigator.storage.getDirectory();
-    this.dir = await root.getDirectoryHandle("notes", { create: true });
+    this.dir = await root.getDirectoryHandle(this.dirName, { create: true });
     return this;
   }
 
@@ -30,7 +31,7 @@ export class FileStore {
       await w.close();
       return;
     }
-    await workerWrite(name, text);
+    await workerWrite(this.dirName, name, text);
   }
 
   async list() {
@@ -74,7 +75,7 @@ export class FileStore {
 }
 
 let worker;
-function workerWrite(name, text) {
+function workerWrite(dir, name, text) {
   worker ||= new Worker(new URL("./opfs-worker.js", import.meta.url));
   return new Promise((resolve, reject) => {
     const id = Math.random().toString(36).slice(2);
@@ -84,6 +85,6 @@ function workerWrite(name, text) {
       e.data.ok ? resolve() : reject(new Error(e.data.error));
     };
     worker.addEventListener("message", onMsg);
-    worker.postMessage({ id, name, text });
+    worker.postMessage({ id, dir, name, text });
   });
 }

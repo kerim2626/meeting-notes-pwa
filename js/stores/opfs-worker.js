@@ -1,9 +1,9 @@
 // Запись файла заметки в OPFS через синхронный дескриптор (резервный путь для Safari).
 self.onmessage = async (e) => {
-  const { id, name, text } = e.data;
+  const { id, dir: dirName = "notes", name, text } = e.data;
   try {
     const root = await navigator.storage.getDirectory();
-    const dir = await root.getDirectoryHandle("notes", { create: true });
+    const dir = await root.getDirectoryHandle(dirName, { create: true });
     const handle = await dir.getFileHandle(name, { create: true });
     const access = await handle.createSyncAccessHandle();
     const bytes = new TextEncoder().encode(text);

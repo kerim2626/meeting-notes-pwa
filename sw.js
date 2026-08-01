@@ -1,5 +1,5 @@
 // Service Worker: кэш оболочки приложения и модуля SQLite для работы без сети.
-const VERSION = "notes-v1.1.1";
+const VERSION = "notes-v1.1.2";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "css/app.css", "js/app.js", "js/model.js", "js/demo.js",
   "js/stores/index.js", "js/stores/sqlite-store.js", "js/stores/file-store.js", "js/stores/idb.js",
   "js/stores/opfs-worker.js", "icons/icon-192.png", "icons/icon-512.png",

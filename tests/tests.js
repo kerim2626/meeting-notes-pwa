@@ -9,6 +9,9 @@ const test = (name, fn) => tests.push({ name, fn });
 const eq = (a, b, msg = "") => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${msg} ожидалось ${JSON.stringify(b)}, получено ${JSON.stringify(a)}`); };
 const ok = (v, msg) => { if (!v) throw new Error(msg || "условие не выполнено"); };
 
+// Тесты работают в отдельном пространстве и не трогают заметки пользователя на этом же сайте
+const NS = "test-notes";
+const modeBefore = localStorage.getItem("notes.storage");
 const sample = (over = {}) => validate({ title: "Планерка", date: "2026-07-14", time: "09:30", kind: "meeting",
   participants: "Иванов, Петрова", content: "Обсудили релиз СИЗАР 2.4", ...over }).note;
 
@@ -68,19 +71,20 @@ function storeSuite(label, make) {
     eq((await again.list()).map((n) => n.title), ["Сохранится"]);
   });
 }
-storeSuite("SQLite", () => new SqliteStore().init());
-storeSuite("Файлы (OPFS)", () => new FileStore().init());
+storeSuite("SQLite", () => new SqliteStore(NS).init());
+storeSuite("Файлы (OPFS)", () => new FileStore(NS).init());
 
 test("Перенос заметок из SQLite в файлы без дублей", async () => {
-  const a = await new SqliteStore().init(); await a.clear();
-  const f = await new FileStore().init(); await f.clear();
+  const a = await new SqliteStore(NS).init(); await a.clear();
+  const f = await new FileStore(NS).init(); await f.clear();
   await a.save(sample({ title: "Перенос 1" })); await a.save(sample({ title: "Перенос 2" }));
-  const to = await switchStore(a, "files", true);
-  await switchStore(a, "files", true);
+  const opts = { ns: NS, remember: false };
+  const to = await switchStore(a, "files", true, opts);
+  await switchStore(a, "files", true, opts);
   eq((await to.list()).length, 2);
 });
 test("FileStore: защита от «../» в идентификаторе", async () => {
-  const f = await new FileStore().init();
+  const f = await new FileStore(NS).init();
   let failed = false;
   try { await f.save(sample({ id: "../../x" })); } catch { failed = true; }
   ok(failed, "ожидалась ошибка");
@@ -89,6 +93,11 @@ test("FileStore: защита от «../» в идентификаторе", asy
 const log = document.getElementById("log");
 let passed = 0;
 const results = [];
+test("Тесты не меняют данные и режим хранения приложения", async () => {
+  eq(localStorage.getItem("notes.storage"), modeBefore);
+  eq((await new SqliteStore().init()).key, "notes.sqlite");
+});
+
 for (const t of tests) {
   const li = document.createElement("li");
   try { await t.fn(); li.className = "ok"; li.textContent = `✔ ${t.name}`; passed++; results.push([t.name, true]); }

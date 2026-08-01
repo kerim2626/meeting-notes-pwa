@@ -4,7 +4,6 @@ import { idbGet, idbSet } from "./idb.js";
 
 // sql.js 1.10.3 (MIT) хранится в репозитории: приложение не зависит от доступности CDN
 const SQLJS = new URL("../../vendor/sql.js/", import.meta.url).href;
-const DB_KEY = "notes.sqlite";
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS notes (
@@ -38,18 +37,19 @@ async function loadSqlJs() {
 }
 
 export class SqliteStore {
-  constructor() { this.name = "sqlite"; this.title = "База данных SQLite"; }
+  /** ns — пространство хранения: у приложения «notes», у браузерных тестов отдельное. */
+  constructor(ns = "notes") { this.name = "sqlite"; this.title = "База данных SQLite"; this.key = `${ns}.sqlite`; }
 
   async init() {
     const SQL = await loadSqlJs();
-    const bytes = await idbGet(DB_KEY);
+    const bytes = await idbGet(this.key);
     this.db = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database();
     this.db.run(SCHEMA);
     return this;
   }
 
   async persist() {
-    await idbSet(DB_KEY, this.db.export());   // запись файла базы после каждого изменения
+    await idbSet(this.key, this.db.export());   // запись файла базы после каждого изменения
   }
 
   rows(sql, params = []) {
